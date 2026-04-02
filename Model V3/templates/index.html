@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PhishGuard — Threat Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+/* ══════════════════════════════════════════
+   ROOT TOKENS
+══════════════════════════════════════════ */
+:root {
+  --bg0:     #04060d;
+  --bg1:     #080e1a;
+  --bg2:     #0c1526;
+  --bg3:     #101d32;
+  --border:  #162038;
+  --border2: #1e2e4a;
+
+  --cyan:    #00f5e4;
+  --cyan2:   #00bfb3;
+  --red:     #ff2d55;
+  --red2:    #c0213e;
+  --green:   #00e676;
+  --green2:  #00a854;
+  --amber:   #ffb300;
+  --amber2:  #e07b00;
+  --blue:    #448aff;
+  --purple:  #aa60ff;
+
+  --text:    #b8cfe8;
+  --text2:   #607b9a;
+  --text3:   #384f6b;
+
+  --font-display: 'Orbitron', monospace;
+  --font-mono:    'JetBrains Mono', monospace;
+
+  --r: 4px;
+}
+
+/* ══════════════════════════════════════════
+   RESET & BASE
+══════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg0);
+  color: var(--text);
+  font-family: var(--font-mono);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── animated grid bg ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(0,245,228,.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,245,228,.028) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: gridshift 20s linear infinite;
+}
+@keyframes gridshift {
+  from { background-position: 0 0; }
+  to   { background-position: 48px 48px; }
+}
+
+/* ── scanlines ── */
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0, transparent 2px,
+    rgba(0,0,0,.15) 2px, rgba(0,0,0,.15) 4px
+  );
+}
+
+/* ══════════════════════════════════════════
+   LAYOUT
+══════════════════════════════════════════ */
+.shell {
+  position: relative; z-index: 1;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 36px 24px 100px;
+}
+
+/* ══════════════════════════════════════════
+   HEADER
+══════════════════════════════════════════ */
+.hdr {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 52px;
+  animation: fadein .6s ease;
+}
+
+.hdr-icon {
+  width: 56px; height: 56px;
+  border: 1.5px solid var(--cyan);
+  display: grid; place-items: center;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+.hdr-icon::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(0,245,228,.12), transparent);
+  animation: shimmer 3s ease-in-out infinite alternate;
+}
+@keyframes shimmer { from { opacity: .4; } to { opacity: 1; } }
+.hdr-icon svg { width: 30px; height: 30px; fill: var(--cyan); position: relative; z-index: 1; }
+
+.hdr-copy h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 3vw, 2.1rem);
+  font-weight: 900;
+  letter-spacing: .06em;
+  color: #fff;
+}
+.hdr-copy h1 em { color: var(--cyan); font-style: normal; }
+.hdr-copy p {
+  font-size: .72rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--text2);
+  margin-top: 5px;
+}
+
+.hdr-status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .7rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: blink 2s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+/* ══════════════════════════════════════════
+   SECTION HEADERS
+══════════════════════════════════════════ */
+.sec-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.sec-num {
+  font-family: var(--font-display);
+  font-size: .65rem;
+  font-weight: 700;
+  color: var(--cyan);
+  border: 1px solid var(--cyan);
+  padding: 3px 8px;
+  letter-spacing: .1em;
+}
+.sec-title {
+  font-family: var(--font-display);
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.sec-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--border2), transparent);
+}
+
+/* ══════════════════════════════════════════
+   CARD
+══════════════════════════════════════════ */
+.card {
+  background: var(--bg1);
+  border: 1px solid var(--border2);
+  padding: 28px 32px;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+  animation: fadein .5s ease;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  opacity: .4;
+}
+
+/* ══════════════════════════════════════════
+   INPUT + BUTTON
+══════════════════════════════════════════ */
+.input-row {
+  display: flex;
+  gap: 10px;
+}
+
+.url-inp {
+  flex: 1;
+  background: var(--bg0);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: .88rem;
+  padding: 13px 16px;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+  border-radius: var(--r);
+}
+.url-inp::placeholder { color: var(--text3); }
+.url-inp:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px rgba(0,245,228,.12), 0 0 20px rgba(0,245,228,.08);
+}
+
+.btn {
+  font-family: var(--font-display);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  border: none;
+  cursor: pointer;
+  padding: 13px 26px;
+  border-radius: var(--r);
+  transition: all .2s;
+  white-space: nowrap;
+}
+.btn-cyan {
+  background: var(--cyan);
+  color: var(--bg0);
+}
+.btn-cyan:hover {
+  background: #fff;
+  box-shadow: 0 0 28px rgba(0,245,228,.5);
+}
+.btn-cyan:disabled { background: var(--border2); color: var(--text3); cursor: not-allowed; box-shadow: none; }
+
+/* ══════════════════════════════════════════
+   SPINNER
+══════════════════════════════════════════ */
+.spinner {
+  display: none;
+  width: 22px; height: 22px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: spin .65s linear infinite;
+  margin: 24px auto;
+}
+.spinner.on { display: block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ══════════════════════════════════════════
+   ERROR BAR
+══════════════════════════════════════════ */
+.err {
+  display: none;
+  margin-top: 14px;
+  padding: 11px 16px;
+  border: 1px solid var(--red);
+  color: var(--red);
+  font-size: .8rem;
+  border-radius: var(--r);
+  background: rgba(255,45,85,.06);
+}
+.err.on { display: block; animation: fadein .3s; }
+
+/* ══════════════════════════════════════════
+   RESULT CARD — PREDICT
+══════════════════════════════════════════ */
+.res {
+  display: none;
+  margin-top: 22px;
+  animation: fadein .4s ease;
+}
+.res.on { display: block; }
+
+.verdict-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 20px 24px;
+  border-radius: var(--r);
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  margin-bottom: 16px;
+}
+.verdict-row.safe  { border-color: var(--green);  background: rgba(0,230,118,.05); }
+.verdict-row.phish { border-color: var(--red);    background: rgba(255,45,85,.06); }
+
+.verdict-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+.verdict-label {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: .06em;
+}
+.verdict-row.safe  .verdict-label { color: var(--green); }
+.verdict-row.phish .verdict-label { color: var(--red); }
+.verdict-sub {
+  font-size: .72rem;
+  color: var(--text2);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-top: 3px;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+.meta-cell {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  border-radius: var(--r);
+}
+.meta-cell label {
+  display: block;
+  font-size: .63rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text2);
+  margin-bottom: 6px;
+}
+.meta-cell span {
+  font-size: .92rem;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.prob-wrap { margin-top: 14px; }
+.prob-wrap label {
+  font-size: .63rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text2);
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.prob-track {
+  height: 5px;
+  background: var(--border2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.prob-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 3px;
+  transition: width 1s cubic-bezier(.4,0,.2,1);
+}
+.prob-fill.safe  { background: linear-gradient(90deg, var(--green2), var(--green)); }
+.prob-fill.phish { background: linear-gradient(90deg, var(--red2), var(--red)); }
+
+/* ══════════════════════════════════════════
+   SECTION 2 — CRAWLER
+══════════════════════════════════════════ */
+.section2 { margin-top: 56px; }
+
+/* stats row */
+.stat-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.stat-chip {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  padding: 14px 22px;
+  border-radius: var(--r);
+  min-width: 110px;
+}
+.stat-chip .val {
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: 900;
+  line-height: 1;
+}
+.stat-chip .lbl {
+  font-size: .62rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text2);
+  margin-top: 4px;
+}
+.stat-chip.c-cyan  .val { color: var(--cyan); }
+.stat-chip.c-green .val { color: var(--green); }
+.stat-chip.c-red   .val { color: var(--red); }
+.stat-chip.c-amber .val { color: var(--amber); }
+
+/* graph wrapper */
+.graph-wrap {
+  position: relative;
+  border: 1px solid var(--border2);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 10%, #0d1f38, var(--bg0) 70%);
+}
+
+#graph-svg {
+  width: 100%;
+  height: 600px;
+  display: block;
+}
+
+.graph-controls {
+  position: absolute;
+  top: 14px; right: 14px;
+  display: flex;
+  gap: 8px;
+}
+.gc-btn {
+  background: rgba(8,14,26,.85);
+  border: 1px solid var(--border2);
+  color: var(--text2);
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: var(--r);
+  transition: all .2s;
+  backdrop-filter: blur(6px);
+}
+.gc-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+/* tooltip */
+#tt {
+  position: fixed;
+  background: rgba(8,14,26,.96);
+  border: 1px solid var(--border2);
+  padding: 12px 16px;
+  border-radius: var(--r);
+  pointer-events: none;
+  z-index: 9999;
+  min-width: 220px;
+  max-width: 340px;
+  display: none;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 16px 48px rgba(0,0,0,.6);
+}
+#tt.on { display: block; }
+#tt-verdict {
+  font-family: var(--font-display);
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  margin-bottom: 6px;
+}
+#tt-verdict.safe  { color: var(--green); }
+#tt-verdict.phish { color: var(--red); }
+#tt-verdict.amber { color: var(--amber); }
+#tt-url { font-size: .68rem; color: var(--text2); word-break: break-all; margin-bottom: 6px; }
+#tt-score { font-size: .78rem; color: var(--text); }
+
+/* legend */
+.legend {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  font-size: .72rem;
+  color: var(--text2);
+}
+.ld { display: flex; align-items: center; gap: 7px; }
+.ld-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+/* ══════════════════════════════════════════
+   ANIMATIONS
+══════════════════════════════════════════ */
+@keyframes fadein {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ══ HEADER ══ -->
+  <header class="hdr">
+    <div class="hdr-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5L12 1zm-1 14l-3-3 1.41-1.41L11 12.17l4.59-4.58L17 9l-6 6z"/></svg>
+    </div>
+    <div class="hdr-copy">
+      <h1>Phish<em>Guard</em></h1>
+      <p>URL Threat Intelligence Platform &nbsp;·&nbsp; Model V3 XGBoost + TF-IDF</p>
+    </div>
+    <div class="hdr-status">
+      <div class="status-dot"></div>
+      System Online
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════
+       SECTION 1 — SINGLE URL SCAN
+  ══════════════════════════════════════ -->
+  <div class="sec-head">
+    <div class="sec-num">01</div>
+    <div class="sec-title">Single URL Analysis</div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="card">
+    <div class="input-row">
+      <input class="url-inp" id="p-input" type="text"
+             placeholder="https://example.com/login?token=abc123…"
+             onkeydown="if(event.key==='Enter') runPredict()"/>
+      <button class="btn btn-cyan" id="p-btn" onclick="runPredict()">Scan URL</button>
+    </div>
+    <div class="spinner" id="p-spin"></div>
+    <div class="err" id="p-err"></div>
+
+    <div class="res" id="p-res">
+      <div class="verdict-row" id="p-verdict-row">
+        <div class="verdict-icon" id="p-icon"></div>
+        <div>
+          <div class="verdict-label" id="p-label"></div>
+          <div class="verdict-sub" id="p-sub"></div>
+        </div>
+      </div>
+
+      <div class="meta-grid">
+        <div class="meta-cell" style="grid-column:1/-1">
+          <label>Scanned URL</label>
+          <span id="p-url" style="font-size:.76rem; color:var(--text2);"></span>
+        </div>
+        <div class="meta-cell">
+          <label>Verdict</label>
+          <span id="p-verdict-txt"></span>
+        </div>
+        <div class="meta-cell">
+          <label>Phishing Probability</label>
+          <span id="p-prob-txt"></span>
+        </div>
+        <div class="meta-cell">
+          <label>Threshold</label>
+          <span style="color:var(--text2);">35%</span>
+        </div>
+      </div>
+
+      <div class="prob-wrap">
+        <label>
+          <span>Probability Bar</span>
+          <span id="p-pct"></span>
+        </label>
+        <div class="prob-track">
+          <div class="prob-fill" id="p-bar"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SECTION 2 — CRAWLER GRAPH
+  ══════════════════════════════════════ -->
+  <div class="section2">
+    <div class="sec-head">
+      <div class="sec-num">02</div>
+      <div class="sec-title">Web Graph Crawler</div>
+      <div class="sec-line"></div>
+    </div>
+
+    <div class="card">
+      <div class="input-row">
+        <input class="url-inp" id="c-input" type="text"
+               placeholder="https://target-site.com"
+               onkeydown="if(event.key==='Enter') runCrawl()"/>
+        <button class="btn btn-cyan" id="c-btn" onclick="runCrawl()">Crawl &amp; Graph</button>
+      </div>
+      <div class="spinner" id="c-spin"></div>
+      <div class="err" id="c-err"></div>
+    </div>
+
+    <div id="c-results" style="display:none;">
+      <div class="stat-row">
+        <div class="stat-chip c-cyan">
+          <div class="val" id="s-total">0</div>
+          <div class="lbl">Total Nodes</div>
+        </div>
+        <div class="stat-chip c-green">
+          <div class="val" id="s-safe">0</div>
+          <div class="lbl">Benign</div>
+        </div>
+        <div class="stat-chip c-red">
+          <div class="val" id="s-phish">0</div>
+          <div class="lbl">Phishing</div>
+        </div>
+        <div class="stat-chip c-amber">
+          <div class="val" id="s-edges">0</div>
+          <div class="lbl">Links</div>
+        </div>
+      </div>
+
+      <div class="graph-wrap">
+        <svg id="graph-svg"></svg>
+        <div class="graph-controls">
+          <button class="gc-btn" onclick="resetZoom()">Reset Zoom</button>
+          <button class="gc-btn" onclick="toggleLabels()">Labels</button>
+        </div>
+      </div>
+
+      <div class="legend">
+        <div class="ld"><div class="ld-dot" style="background:var(--cyan);box-shadow:0 0 6px var(--cyan)"></div>Root URL</div>
+        <div class="ld"><div class="ld-dot" style="background:var(--green);box-shadow:0 0 6px var(--green)"></div>Benign</div>
+        <div class="ld"><div class="ld-dot" style="background:var(--amber);box-shadow:0 0 6px var(--amber)"></div>Medium Risk (35–70%)</div>
+        <div class="ld"><div class="ld-dot" style="background:var(--red);box-shadow:0 0 6px var(--red)"></div>Phishing / Spam</div>
+        <div class="ld"><div class="ld-dot" style="background:var(--purple);box-shadow:0 0 6px var(--purple)"></div>Mutual Link</div>
+      </div>
+    </div>
+  </div><!-- /section2 -->
+
+</div><!-- /shell -->
+
+<!-- Tooltip -->
+<div id="tt">
+  <div id="tt-verdict"></div>
+  <div id="tt-url"></div>
+  <div id="tt-score"></div>
+</div>
+
+<!-- ══════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════ -->
+<script>
+/* ── helpers ── */
+const $  = id => document.getElementById(id);
+const cls = (el, add, ...names) => names.forEach(n => el.classList[add ? 'add' : 'remove'](n));
+
+/* ══════════════════════════════════════
+   SECTION 1 — PREDICT
+══════════════════════════════════════ */
+async function runPredict() {
+  const url  = $('p-input').value.trim();
+  const btn  = $('p-btn');
+  if (!url) return;
+
+  btn.disabled = true;
+  cls($('p-spin'), true, 'on');
+  cls($('p-err'),  false, 'on');
+  cls($('p-res'),  false, 'on');
+
+  try {
+    const r = await fetch('/predict', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({url})
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+
+    const isPhish = d.prediction === 'Phishing';
+    const prob    = d.probability;
+    const pct     = (prob * 100).toFixed(1);
+    const cls2    = isPhish ? 'phish' : 'safe';
+
+    /* verdict row */
+    const vrow = $('p-verdict-row');
+    vrow.className = 'verdict-row ' + cls2;
+    $('p-icon').textContent  = isPhish ? '⚠' : '✔';
+    $('p-label').textContent = isPhish ? 'PHISHING DETECTED' : 'BENIGN URL';
+    $('p-sub').textContent   = isPhish
+      ? 'This URL exhibits phishing characteristics.'
+      : 'No significant threat signals detected.';
+
+    /* meta */
+    $('p-url').textContent        = d.url;
+    $('p-verdict-txt').textContent = d.prediction;
+    $('p-verdict-txt').style.color = isPhish ? 'var(--red)' : 'var(--green)';
+    $('p-prob-txt').textContent   = pct + '%';
+    $('p-prob-txt').style.color   = isPhish ? 'var(--red)' : 'var(--green)';
+    $('p-pct').textContent        = pct + '%';
+
+    /* bar */
+    const bar = $('p-bar');
+    bar.className = 'prob-fill ' + cls2;
+    bar.style.width = '0';
+    requestAnimationFrame(() => setTimeout(() => { bar.style.width = pct + '%'; }, 30));
+
+    cls($('p-res'), true, 'on');
+  } catch(e) {
+    $('p-err').textContent = '⚡ ' + (e.message || 'Request failed');
+    cls($('p-err'), true, 'on');
+  } finally {
+    btn.disabled = false;
+    cls($('p-spin'), false, 'on');
+  }
+}
+
+/* ══════════════════════════════════════
+   SECTION 2 — CRAWL + D3 GRAPH
+══════════════════════════════════════ */
+let zoomBeh = null;
+let svgRoot = null;
+let showLabels = true;
+let animTimer  = null;
+
+async function runCrawl() {
+  const url = $('c-input').value.trim();
+  const btn = $('c-btn');
+  if (!url) return;
+
+  btn.disabled = true;
+  cls($('c-spin'), true, 'on');
+  cls($('c-err'),  false, 'on');
+  $('c-results').style.display = 'none';
+
+  try {
+    const r = await fetch('/crawl', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({url})
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({error:'Server error'}));
+      throw new Error(e.error || `HTTP ${r.status}`);
+    }
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+
+    const phishN = data.nodes.filter(n => n.label === 'spam').length;
+    const safeN  = data.nodes.length - phishN;
+
+    $('s-total').textContent = data.nodes.length;
+    $('s-safe').textContent  = safeN;
+    $('s-phish').textContent = phishN;
+    $('s-edges').textContent = data.links.length;
+
+    $('c-results').style.display = 'block';
+    buildGraph(data.nodes, data.links, url);
+  } catch(e) {
+    $('c-err').textContent = '⚡ ' + (e.message || 'Crawl failed');
+    cls($('c-err'), true, 'on');
+  } finally {
+    btn.disabled = false;
+    cls($('c-spin'), false, 'on');
+  }
+}
+
+function shortUrl(u) {
+  try {
+    const p = new URL(u);
+    const path = p.pathname.length > 22 ? p.pathname.slice(0,19)+'…' : p.pathname;
+    return p.hostname.replace(/^www\./,'') + (path && path !== '/' ? path : '');
+  } catch { return u.length > 30 ? u.slice(0,27)+'…' : u; }
+}
+
+function nodeColor(d, rootUrl) {
+  if (d.id === rootUrl) return 'var(--cyan)';
+  if (d.label === 'spam')         return 'var(--red)';
+  if (d.score >= 0.35)            return 'var(--amber)';
+  return 'var(--green)';
+}
+function nodeGlow(d, rootUrl) {
+  if (d.id === rootUrl) return 'drop-shadow(0 0 10px rgba(0,245,228,.8))';
+  if (d.label === 'spam')         return 'drop-shadow(0 0 10px rgba(255,45,85,.8))';
+  if (d.score >= 0.35)            return 'drop-shadow(0 0 10px rgba(255,179,0,.7))';
+  return 'drop-shadow(0 0 8px rgba(0,230,118,.7))';
+}
+
+function buildGraph(nodes, links, rootUrl) {
+  if (animTimer) animTimer.stop();
+
+  const svg = d3.select('#graph-svg');
+  svg.selectAll('*').remove();
+
+  const W = svg.node().clientWidth  || 1100;
+  const H = svg.node().clientHeight || 600;
+
+  /* defs: arrowhead */
+  const defs = svg.append('defs');
+  defs.append('marker')
+    .attr('id','arr').attr('viewBox','0 -4 10 8')
+    .attr('refX',20).attr('refY',0)
+    .attr('markerWidth',6).attr('markerHeight',6)
+    .attr('orient','auto')
+    .append('path').attr('d','M0,-4L10,0L0,4')
+    .attr('fill','rgba(96,165,250,.5)');
+
+  defs.append('marker')
+    .attr('id','arr-mutual').attr('viewBox','0 -4 10 8')
+    .attr('refX',20).attr('refY',0)
+    .attr('markerWidth',6).attr('markerHeight',6)
+    .attr('orient','auto')
+    .append('path').attr('d','M0,-4L10,0L0,4')
+    .attr('fill','rgba(170,96,255,.7)');
+
+  /* zoom */
+  const g = svg.append('g');
+  zoomBeh = d3.zoom().scaleExtent([.15, 5]).on('zoom', e => g.attr('transform', e.transform));
+  svg.call(zoomBeh);
+  svgRoot = svg;
+
+  /* detect mutual links */
+  const edgeSet = new Set(links.map(l => `${l.source}|${l.target}`));
+  const mutual  = l => edgeSet.has(`${l.target}|${l.source}`);
+
+  /* simulation */
+  const sim = d3.forceSimulation(nodes)
+    .force('link',    d3.forceLink(links).id(d => d.id).distance(110))
+    .force('charge',  d3.forceManyBody().strength(-320))
+    .force('center',  d3.forceCenter(W/2, H/2))
+    .force('collide', d3.forceCollide(28));
+
+  /* links */
+  const link = g.append('g').selectAll('line').data(links).join('line')
+    .attr('stroke', d => mutual(d) ? 'rgba(170,96,255,.65)' : 'rgba(96,165,250,.45)')
+    .attr('stroke-width', d => mutual(d) ? 2 : 1.4)
+    .attr('stroke-dasharray', '6 4')
+    .attr('marker-end', d => `url(#${mutual(d) ? 'arr-mutual' : 'arr'})`);
+
+  /* travel dots */
+  const dots = g.append('g').selectAll('circle').data(links).join('circle')
+    .attr('r', 3)
+    .attr('fill', d => mutual(d) ? 'rgba(170,96,255,.85)' : 'rgba(125,211,252,.85)')
+    .style('filter', 'drop-shadow(0 0 4px rgba(125,211,252,.6))');
+
+  /* node groups */
+  const node = g.append('g').selectAll('g').data(nodes).join('g')
+    .style('cursor','pointer')
+    .call(d3.drag()
+      .on('start', (e,d) => { if(!e.active) sim.alphaTarget(.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag',  (e,d) => { d.fx=e.x; d.fy=e.y; })
+      .on('end',   (e,d) => { if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; })
+    );
+
+  /* aura pulse */
+  node.append('circle')
+    .attr('class','node-aura')
+    .attr('r', d => d.id === rootUrl ? 30 : 20)
+    .attr('fill','none')
+    .attr('stroke', d => nodeColor(d, rootUrl))
+    .attr('stroke-width', 1)
+    .attr('opacity', .25);
+
+  /* core circle */
+  node.append('circle')
+    .attr('r', d => d.id === rootUrl ? 14 : 9)
+    .attr('fill', d => nodeColor(d, rootUrl))
+    .attr('stroke', '#04060d')
+    .attr('stroke-width', 1.5)
+    .style('filter', d => nodeGlow(d, rootUrl));
+
+  /* label */
+  const labels = node.append('text')
+    .attr('x', d => (d.id === rootUrl ? 18 : 13))
+    .attr('y', 4)
+    .attr('fill', '#b8cfe8')
+    .attr('font-family', "'JetBrains Mono', monospace")
+    .attr('font-size', '10px')
+    .attr('stroke', 'rgba(4,6,13,.95)')
+    .attr('stroke-width', '2.5px')
+    .attr('paint-order', 'stroke')
+    .text(d => shortUrl(d.id));
+
+  /* tooltip */
+  const tt = $('tt');
+  node.on('mousemove', (e, d) => {
+    const vc = d.id === rootUrl ? 'amber' : (d.label === 'spam' ? 'phish' : (d.score >= 0.35 ? 'amber' : 'safe'));
+    $('tt-verdict').className = '';
+    $('tt-verdict').classList.add(vc);
+    $('tt-verdict').textContent = d.id === rootUrl
+      ? '⭐ ROOT NODE'
+      : (d.label === 'spam' ? '⚠ PHISHING / SPAM' : (d.score >= 0.35 ? '⚡ MEDIUM RISK' : '✔ BENIGN'));
+    $('tt-url').textContent   = d.id;
+    $('tt-score').textContent = `Score: ${(d.score*100).toFixed(1)}%`;
+    tt.style.left = (e.clientX + 16) + 'px';
+    tt.style.top  = (e.clientY - 10) + 'px';
+    cls(tt, true, 'on');
+  }).on('mouseleave', () => cls(tt, false, 'on'));
+
+  /* click → open URL */
+  node.on('click', (e, d) => {
+    try {
+      const p = new URL(d.id);
+      if (p.protocol === 'http:' || p.protocol === 'https:')
+        window.open(p.href, '_blank', 'noopener,noreferrer');
+    } catch {}
+  });
+
+  /* tick */
+  sim.on('tick', () => {
+    link
+      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    node.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+
+  /* travel dot animation */
+  animTimer = d3.timer(elapsed => {
+    const off = -(elapsed / 25);
+    link.attr('stroke-dashoffset', off);
+    dots.attr('cx', d => {
+      if (!d.source?.x) return 0;
+      const t = ((elapsed / 1200) + (d.index||0) * .17) % 1;
+      return d.source.x + (d.target.x - d.source.x) * t;
+    }).attr('cy', d => {
+      if (!d.source?.y) return 0;
+      const t = ((elapsed / 1200) + (d.index||0) * .17) % 1;
+      return d.source.y + (d.target.y - d.source.y) * t;
+    });
+  });
+}
+
+function resetZoom() {
+  if (svgRoot && zoomBeh)
+    svgRoot.transition().duration(500).call(zoomBeh.transform, d3.zoomIdentity);
+}
+
+function toggleLabels() {
+  showLabels = !showLabels;
+  d3.selectAll('#graph-svg text')
+    .style('display', showLabels ? null : 'none');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<style>
+:root {
+    --bg-main: #020617;
+    --bg-secondary: #0f172a;
+    --bg-surface: #111c34;
+    --glass: rgba(148, 163, 184, 0.08);
+
+    --primary: #6366f1;
+    --accent: #22d3ee;
+    --highlight: #a78bfa;
+    --ok: #34d399;
+    --error: #fb7185;
+
+    --node-root-fill: #f59e0b;
+    --node-root-stroke: #fde68a;
+    --node-internal-fill: #6366f1;
+    --node-internal-stroke: #a5b4fc;
+    --node-external-fill: #22d3ee;
+    --node-external-stroke: #67e8f9;
+    --risk-safe-fill: #22c55e;
+    --risk-medium-fill: #f59e0b;
+    --risk-spam-fill: #ef4444;
+
+    --link-oneway: rgba(96, 165, 250, 0.72);
+    --link-mutual: rgba(167, 139, 250, 0.9);
+
+    --text-main: #e2e8f0;
+    --text-soft: #94a3b8;
+}
+
+/* ===== BODY ===== */
+body {
+    margin: 0;
+    padding: 28px;
+    font-family: "Segoe UI", sans-serif;
+    background: radial-gradient(circle at 20% 20%, #1e293b, #0f172a 55%, #020617 100%);
+    color: var(--text-main);
+    min-height: 100vh;
+}
+
+/* glowing background blobs */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background:
+        radial-gradient(circle at 30% 30%, rgba(99,102,241,0.25), transparent 40%),
+        radial-gradient(circle at 70% 20%, rgba(34,211,238,0.2), transparent 45%),
+        radial-gradient(circle at 50% 80%, rgba(167,139,250,0.2), transparent 45%);
+    filter: blur(40px);
+    z-index: -1;
+}
+
+/* ===== HERO ===== */
+#hero h1 {
+    margin: 0;
+    font-size: 1.9rem;
+    background: linear-gradient(90deg, #22d3ee, #6366f1, #a78bfa);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+#hero p {
+    color: var(--text-soft);
+}
+
+/* ===== PANEL ===== */
+#panel {
+    margin-top: 16px;
+    padding: 16px;
+    border-radius: 16px;
+    background: var(--glass);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(148,163,184,0.18);
+    box-shadow: 0 14px 44px rgba(0,0,0,0.5), inset 0 0 40px rgba(99,102,241,0.08);
+}
+
+/* ===== CONTROLS ===== */
+#controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* ===== INPUT ===== */
+#urlInput {
+    padding: 10px 12px;
+    width: 420px;
+    max-width: 100%;
+    border-radius: 10px;
+    border: 1px solid #334155;
+    background: rgba(2,6,23,0.95);
+    color: #fff;
+    outline: none;
+    transition: 0.3s;
+}
+
+#urlInput:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(34,211,238,0.2), 0 0 16px rgba(34,211,238,0.35);
+}
+
+/* ===== BUTTON ===== */
+button {
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: none;
+    background: linear-gradient(135deg, #6366f1, #22d3ee);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.25s ease;
+    box-shadow: 0 8px 20px rgba(99,102,241,0.35);
+}
+
+button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(99,102,241,0.5);
+}
+
+/* ===== STATUS ===== */
+#status {
+    margin: 10px 0;
+    color: var(--accent);
+    min-height: 20px;
+}
+
+/* ===== SVG ===== */
+svg {
+    width: 100%;
+    height: 650px;
+    border-radius: 14px;
+    background: radial-gradient(circle at 50% 12%, var(--bg-surface), var(--bg-main));
+    border: 1px solid rgba(148,163,184,0.16);
+    box-shadow: inset 0 0 80px rgba(99,102,241,0.06);
+}
+
+/* ===== LINKS ===== */
+.link {
+    stroke: var(--link-oneway);
+    stroke-opacity: 0.7;
+    stroke-width: 1.6;
+    stroke-dasharray: 6 4;
+    transition: stroke-opacity 0.2s ease, stroke-width 0.2s ease;
+}
+
+.link-mutual {
+    stroke: var(--link-mutual);
+    stroke-width: 2.2;
+}
+
+.link-oneway {
+    stroke: var(--link-oneway);
+}
+
+.link.active {
+    stroke: #22d3ee;
+    stroke-width: 2.6;
+}
+
+.link.dimmed {
+    stroke-opacity: 0.1;
+}
+
+/* ===== NODES ===== */
+.node-core {
+    fill: var(--node-internal-fill);
+    stroke: var(--node-internal-stroke);
+    stroke-width: 2;
+    filter: drop-shadow(0 0 6px rgba(99,102,241,0.7));
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.node-root {
+    fill: var(--node-root-fill);
+    stroke: var(--node-root-stroke);
+    filter: drop-shadow(0 0 10px rgba(245,158,11,0.8));
+}
+
+.node-external {
+    fill: var(--node-external-fill);
+    stroke: var(--node-external-stroke);
+    filter: drop-shadow(0 0 8px rgba(34,211,238,0.8));
+}
+
+.node-internal {
+    fill: var(--node-internal-fill);
+    stroke: var(--node-internal-stroke);
+}
+
+.node-safe {
+    fill: var(--risk-safe-fill);
+    stroke: #86efac;
+    filter: drop-shadow(0 0 8px rgba(34,197,94,0.75));
+}
+
+.node-medium {
+    fill: var(--risk-medium-fill);
+    stroke: #fcd34d;
+    filter: drop-shadow(0 0 9px rgba(245,158,11,0.78));
+}
+
+.node-spam {
+    fill: var(--risk-spam-fill);
+    stroke: #fca5a5;
+    filter: drop-shadow(0 0 10px rgba(239,68,68,0.82));
+}
+
+.node-pulse {
+    fill: none;
+    stroke: rgba(103,232,249,0.6);
+    stroke-width: 2;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.node-aura {
+    fill: none;
+    stroke: rgba(167,139,250,0.35);
+    stroke-width: 1.4;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.node.active .node-core {
+    transform: scale(1.12);
+}
+
+.node.dimmed .node-core {
+    opacity: 0.2;
+}
+
+/* ===== LABEL ===== */
+.label {
+    font-size: 11px;
+    fill: #e2e8f0;
+    opacity: 0.82;
+    stroke: rgba(2,6,23,0.95);
+    stroke-width: 2px;
+    paint-order: stroke;
+    transition: opacity 0.2s ease;
+}
+
+.node:hover .label {
+    opacity: 1;
+}
+
+.node.dimmed .label {
+    opacity: 0.15;
+}
+
+.link-travel-dot {
+    fill: #7dd3fc;
+    opacity: 0.9;
+    filter: drop-shadow(0 0 5px rgba(125,211,252,0.85));
+    transition: opacity 0.2s ease;
+}
+
+.link-travel-dot.dimmed {
+    opacity: 0.12;
+}
+
+.connection-badge {
+    font-size: 10px;
+    fill: #93c5fd;
+    stroke: rgba(2,6,23,0.95);
+    stroke-width: 2px;
+    paint-order: stroke;
+    opacity: 0.62;
+    user-select: none;
+    pointer-events: none;
+}
+
+.connection-badge.mutual {
+    fill: #c4b5fd;
+}
+
+.connection-badge.active {
+    opacity: 1;
+}
+
+.connection-badge.dimmed {
+    opacity: 0.08;
+}
+
+/* ===== LEGEND ===== */
+#legend {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text-soft);
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+/* ===== CONNECTION INFO ===== */
+#connectionInfo {
+    margin-top: 8px;
+    color: var(--accent);
+    font-size: 12px;
+    min-height: 18px;
+}
+
+/* ===== DOT ===== */
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="app">
+    <section id="hero">
+        <h1>Web Connection Visualizer</h1>
+        <p>Explore connected URLs with animated graph interactions.</p>
+    </section>
+
+    <section id="panel">
+        <div id="controls">
+            <input type="text" id="urlInput" placeholder="Enter URL (https://example.com)">
+            <button onclick="fetchGraph()">Visualize</button>
+        </div>
+
+        <p id="status"></p>
+
+        <svg></svg>
+
+        <div id="legend">
+            <span><span class="legend-dot" style="background:#f59e0b"></span>Root</span>
+            <span><span class="legend-dot" style="background:#22d3ee"></span>External</span>
+            <span><span class="legend-dot" style="background:#6366f1"></span>Internal</span>
+            <span><span class="legend-dot" style="background:#a78bfa"></span>Mutual link (1:1)</span>
+            <span><span class="legend-dot" style="background:#22c55e"></span>Not spam</span>
+            <span><span class="legend-dot" style="background:#f59e0b"></span>Medium risk</span>
+            <span><span class="legend-dot" style="background:#ef4444"></span>Spam</span>
+        </div>
+
+        <div id="connectionInfo"></div>
+    </section>
+</div>
+
+<script>
+let linkAnimationTimer = null;
+
+async function fetchGraph() {
+    const url = document.getElementById("urlInput").value;
+    const status = document.getElementById("status");
+
+    if (!url) {
+        status.textContent = "Please enter a URL first.";
+        return;
+    }
+
+    status.textContent = "Loading crawl data...";
+
+    try {
+        const res = await fetch("http://127.0.0.1:5000/crawl", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({url})
+        });
+
+        if (!res.ok) {
+            const errorPayload = await res.json().catch(() => ({ error: "Unknown server error" }));
+            throw new Error(errorPayload.error || `Server error: ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        if (!data.nodes || !data.links) {
+            throw new Error("Invalid graph payload from server.");
+        }
+
+        drawGraph(data);
+        status.textContent = `Rendered ${data.nodes.length} nodes and ${data.links.length} links.`;
+    } catch (error) {
+        status.textContent = `Failed to load graph: ${error.message}`;
+    }
+}
+
+function shortUrl(urlText) {
+    try {
+        const parsed = new URL(urlText);
+        const displayPath = parsed.pathname.length > 24
+            ? `${parsed.pathname.slice(0, 21)}...`
+            : parsed.pathname;
+        return `${parsed.hostname}${displayPath && displayPath !== "/" ? displayPath : ""}`;
+    } catch (error) {
+        return urlText.length > 28 ? `${urlText.slice(0, 25)}...` : urlText;
+    }
+}
+
+function drawGraph(graph) {
+    const svg = d3.select("svg");
+    const status = document.getElementById("status");
+    const connectionInfo = document.getElementById("connectionInfo");
+    svg.selectAll("*").remove();
+
+    if (linkAnimationTimer) {
+        linkAnimationTimer.stop();
+    }
+
+    const width = 1100;
+    const height = 650;
+
+    if (!graph.nodes || graph.nodes.length === 0) {
+        status.textContent = "No nodes to display.";
+        connectionInfo.textContent = "Try another URL.";
+        return;
+    }
+
+    const nodes = graph.nodes.map((node, index) => {
+        const isRoot = index === 0;
+        let nodeHost = "";
+        let rootHost = "";
+        try {
+            nodeHost = new URL(node.id).hostname.replace(/^www\./, "").toLowerCase();
+            rootHost = new URL(graph.nodes[0].id).hostname.replace(/^www\./, "").toLowerCase();
+        } catch (error) {
+        }
+
+        return {
+            ...node,
+            isRoot,
+            idx: index,
+            isExternal: !isRoot && !!nodeHost && !!rootHost && nodeHost !== rootHost,
+            spamScore: Number(node.score || 0),
+            spamLabel: String(node.label || "not spam")
+        };
+    });
+
+    const rawLinks = graph.links.map((edge) => ({
+        source: edge.source,
+        target: edge.target
+    }));
+    const directedEdgeSet = new Set(rawLinks.map((edge) => `${edge.source}|${edge.target}`));
+    const hasEdge = (sourceId, targetId) => directedEdgeSet.has(`${sourceId}|${targetId}`);
+
+    const typedLinks = rawLinks.map((edge) => {
+        const mutual = hasEdge(edge.target, edge.source);
+        return {
+            ...edge,
+            relationType: mutual ? "1:1" : "1:0",
+            mutual
+        };
+    });
+
+    const connectedMap = new Map(nodes.map((node) => [node.id, new Set([node.id])]));
+
+    typedLinks.forEach((edge) => {
+        const sourceId = typeof edge.source === "string" ? edge.source : edge.source.id;
+        const targetId = typeof edge.target === "string" ? edge.target : edge.target.id;
+        if (!connectedMap.has(sourceId)) connectedMap.set(sourceId, new Set([sourceId]));
+        if (!connectedMap.has(targetId)) connectedMap.set(targetId, new Set([targetId]));
+        connectedMap.get(sourceId).add(targetId);
+        connectedMap.get(targetId).add(sourceId);
+    });
+
+    const simulation = d3.forceSimulation(nodes)
+        .force("link", d3.forceLink(typedLinks).id(d => d.id).distance(170))
+        .force("charge", d3.forceManyBody().strength(-520))
+        .force("collide", d3.forceCollide().radius(d => d.isRoot ? 48 : 34).strength(0.9))
+        .force("center", d3.forceCenter(width/2, height/2));
+
+    const link = svg.append("g")
+        .attr("class", "links")
+        .selectAll("line")
+        .data(typedLinks)
+        .enter()
+        .append("line")
+        .attr("class", d => `link ${d.mutual ? "link-mutual" : "link-oneway"}`);
+
+    const linkLabels = svg.append("g")
+        .attr("class", "link-labels")
+        .selectAll("text")
+        .data(typedLinks)
+        .enter()
+        .append("text")
+        .attr("class", d => `connection-badge ${d.mutual ? "mutual" : ""}`)
+        .text(d => d.relationType);
+
+    const travelDots = svg.append("g")
+        .attr("class", "link-travel")
+        .selectAll("circle")
+        .data(typedLinks)
+        .enter()
+        .append("circle")
+        .attr("class", "link-travel-dot")
+        .attr("r", 3.8);
+
+    const node = svg.append("g")
+        .attr("class", "nodes")
+        .selectAll("g")
+        .data(nodes)
+        .enter()
+        .append("g")
+        .attr("class", "node")
+        .style("opacity", 0)
+        .call(d3.drag()
+            .on("start", dragstarted)
+            .on("drag", dragged)
+            .on("end", dragended));
+
+    node.on("click", function(event, d) {
+        event.stopPropagation();
+        openNodeUrl(d.id);
+    });
+
+    node.on("mouseenter", function(event, hoveredNode) {
+        const relatedIds = connectedMap.get(hoveredNode.id) || new Set([hoveredNode.id]);
+        const relationDetails = [];
+      node.selectAll(".label")
+              .style("opacity", d => d.id === hoveredNode.id ? 1 : 0);
+
+        relatedIds.forEach((neighborId) => {
+            if (neighborId === hoveredNode.id) {
+                return;
+            }
+            const outValue = hasEdge(hoveredNode.id, neighborId) ? 1 : 0;
+            const inValue = hasEdge(neighborId, hoveredNode.id) ? 1 : 0;
+            if (!outValue && !inValue) {
+                return;
+            }
+            const mutualTag = outValue === 1 && inValue === 1 ? " mutual" : "";
+            relationDetails.push(`${shortUrl(hoveredNode.id)} → ${shortUrl(neighborId)} = ${outValue}:${inValue}${mutualTag}`);
+        });
+
+        node
+            .classed("dimmed", d => !relatedIds.has(d.id))
+            .classed("active", d => d.id === hoveredNode.id || relatedIds.has(d.id));
+
+        link
+            .classed("active", d => {
+                const sourceId = typeof d.source === "string" ? d.source : d.source.id;
+                const targetId = typeof d.target === "string" ? d.target : d.target.id;
+                return sourceId === hoveredNode.id || targetId === hoveredNode.id;
+            })
+            .classed("dimmed", d => {
+                const sourceId = typeof d.source === "string" ? d.source : d.source.id;
+                const targetId = typeof d.target === "string" ? d.target : d.target.id;
+                return !(sourceId === hoveredNode.id || targetId === hoveredNode.id);
+            });
+
+        linkLabels
+            .classed("active", d => {
+                const sourceId = typeof d.source === "string" ? d.source : d.source.id;
+                const targetId = typeof d.target === "string" ? d.target : d.target.id;
+                return sourceId === hoveredNode.id || targetId === hoveredNode.id;
+            })
+            .classed("dimmed", d => {
+                const sourceId = typeof d.source === "string" ? d.source : d.source.id;
+                const targetId = typeof d.target === "string" ? d.target : d.target.id;
+                return !(sourceId === hoveredNode.id || targetId === hoveredNode.id);
+            });
+
+        travelDots
+            .classed("dimmed", d => {
+                const sourceId = typeof d.source === "string" ? d.source : d.source.id;
+                const targetId = typeof d.target === "string" ? d.target : d.target.id;
+                return !(sourceId === hoveredNode.id || targetId === hoveredNode.id);
+            });
+
+        // status.textContent = `Focused: ${hoveredNode.id} | ${hoveredNode.spamLabel} (${hoveredNode.spamScore.toFixed(3)})`;
+        // connectionInfo.textContent = relationDetails.length > 0
+        //     ? relationDetails.slice(0, 5).join("  |  ")
+        //     : "No directional connections found for this node.";
+    });
+
+    node.on("mouseleave", function() {
+        clearHighlight();
+        status.textContent = `Rendered ${nodes.length} nodes and ${typedLinks.length} links.`;
+        connectionInfo.textContent = "Hover a node to see 1:1, 1:0, 0:1 connection types.";
+    });
+
+    node.transition()
+        .duration(450)
+        .style("opacity", 1);
+
+    node.append("circle")
+        .attr("class", d => {
+            let riskClass = "node-safe";
+            if (d.spamScore >= 0.7 || d.spamLabel.toLowerCase() === "spam") {
+                riskClass = "node-spam";
+            } else if (d.spamScore >= 0.4) {
+                riskClass = "node-medium";
+            }
+            const roleClass = d.isRoot ? "node-root" : d.isExternal ? "node-external" : "node-internal";
+            return `node-core ${roleClass} ${riskClass}`;
+        })
+        .attr("r", d => d.isRoot ? 10 : 7)
+        .transition()
+        .duration(620)
+        .ease(d3.easeBackOut)
+        .attr("r", d => d.isRoot ? 22 : 14);
+
+    node.select(".node-core")
+        .transition()
+        .delay(700)
+        .duration(1)
+        .attr("r", d => d.isRoot ? 22 : 14);
+
+    node.append("circle")
+        .attr("class", "node-aura")
+        .attr("r", d => d.isRoot ? 30 : 20);
+
+    const pulse = node.append("circle")
+        .attr("class", "node-pulse")
+        .attr("r", d => d.isRoot ? 22 : 14);
+
+    pulse.each(function repeat() {
+        d3.select(this)
+            .transition()
+                .duration(1450)
+            .ease(d3.easeCubicOut)
+                .attr("r", function(d) { return d.isRoot ? 48 : 30; })
+            .style("opacity", 0)
+            .transition()
+            .duration(0)
+                .attr("r", function(d) { return d.isRoot ? 22 : 14; })
+                .style("opacity", 0.55)
+            .on("end", repeat);
+    });
+
+    node.append("text")
+        .attr("class", "label")
+        .attr("x", 24)
+        .attr("y", 6)
+        .text(d => shortUrl(d.id));
+
+    node.append("title")
+        .text(d => `${d.id}\n${d.spamLabel} (${d.spamScore.toFixed(3)})`);
+
+    linkAnimationTimer = d3.timer((elapsed) => {
+        const offset = -(elapsed / 28);
+        link.attr("stroke-dashoffset", offset);
+
+        travelDots
+            .attr("cx", d => {
+                if (!d.source || !d.target || d.source.x === undefined || d.target.x === undefined) {
+                    return 0;
+                }
+                const t = ((elapsed / 1150) + (d.index || 0) * 0.19) % 1;
+                return d.source.x + (d.target.x - d.source.x) * t;
+            })
+            .attr("cy", d => {
+                if (!d.source || !d.target || d.source.y === undefined || d.target.y === undefined) {
+                    return 0;
+                }
+                const t = ((elapsed / 1150) + (d.index || 0) * 0.19) % 1;
+                return d.source.y + (d.target.y - d.source.y) * t;
+            });
+    });
+
+    simulation.on("tick", () => {
+        link
+            .attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y);
+
+        linkLabels
+            .attr("x", d => (d.source.x + d.target.x) / 2)
+            .attr("y", d => (d.source.y + d.target.y) / 2 - 6);
+
+        node
+            .attr("transform", d => `translate(${d.x}, ${d.y})`);
+    });
+
+    function clearHighlight() {
+        node.classed("dimmed", false).classed("active", false);
+        link.classed("active", false).classed("dimmed", false);
+        linkLabels.classed("active", false).classed("dimmed", false);
+        travelDots.classed("dimmed", false);
+    }
+
+    connectionInfo.textContent = "Hover a node to see connection type and spam/not-spam score.";
+
+    function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x; d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+        d.fx = event.x; d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null; d.fy = null;
+    }
+}
+
+function openNodeUrl(rawUrl) {
+    try {
+        const parsed = new URL(rawUrl);
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+            window.open(parsed.toString(), "_blank", "noopener,noreferrer");
+            return;
+        }
+    } catch (error) {
+    }
+
+    const fallbackUrl = `https://${String(rawUrl).replace(/^\/+/, "")}`;
+    try {
+        const fallbackParsed = new URL(fallbackUrl);
+        window.open(fallbackParsed.toString(), "_blank", "noopener,noreferrer");
+    } catch (error) {
+        const status = document.getElementById("status");
+        status.textContent = "Cannot open this node URL.";
+    }
+}
+</script>
+
+</body>
+</html>
