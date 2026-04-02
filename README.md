@@ -42,13 +42,13 @@ A Machine Learning–powered web application that detects phishing URLs and visu
 webCrawler/
 │
 ├── Model V3/
+|   ├── templates/
+│   |   └── index.html               # Frontend UI
 │   ├── main.py                  # Flask backend
 │   ├── xgb_tfidf_enhanced.pkl   # Trained model
 │   ├── tfidf_vectorizer.pkl     # TF-IDF vectorizer
 │   ├── numeric_scaler.pkl       # Feature scaler
 │
-├── templates/
-│   └── index.html               # Frontend UI
 │
 └── README.md
 ```
