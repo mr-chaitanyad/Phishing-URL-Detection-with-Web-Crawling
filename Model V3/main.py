@@ -223,8 +223,7 @@ FEATURE_NAMES = list(extract_features("https://example.com").keys())
 # Model V3 loading
 # ─────────────────────────────────────────────────────────────
 
-MODEL_DIR = Path(".")
-
+MODEL_DIR = Path("Model V3")
 
 def load_artifact(filename):
     path = MODEL_DIR / filename
