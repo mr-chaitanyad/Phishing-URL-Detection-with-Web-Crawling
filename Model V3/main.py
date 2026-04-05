@@ -460,5 +460,7 @@ def features():
 if WsgiToAsgi is not None:
     asgi_app = WsgiToAsgi(app)
 
-if __name__ == "__main__":
-    app.run(debug=True)
+# if __name__ == "__main__":
+#     app.run(debug=True)
+
+app = app
