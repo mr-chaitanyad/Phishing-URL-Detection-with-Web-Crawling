@@ -1,8 +1,0 @@
-{
-  "builds": [
-    { "src": "Model V3/main.py", "use": "@vercel/python" }
-  ],
-  "routes": [
-    { "src": "/(.*)", "dest": "Model V3/main.py" }
-  ]
-}
